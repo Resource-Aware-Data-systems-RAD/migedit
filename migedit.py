@@ -1,3 +1,7 @@
+"""MIG Editor. CLI/importable module to automatically delete and create MIG gpu/cpu instances."""
+
+__version__ = "0.1.0"
+
 import argparse
 import os
 import time
@@ -5,7 +9,13 @@ import time
 from subprocess import Popen, PIPE
 
 
-MIG_OPTIONS = ["1g.5gb", "2g.10gb", "3g.20gb", "4g.20gb", "7g.40gb"]
+MIG_OPTIONS = {
+    "1": "1g.5gb",
+    "2": "2g.10gb",
+    "3": "3g.20gb",
+    "4": "4g.20gb",
+    "7": "7g.40gb",
+}
 
 
 def execute_command(cmd, shell=False, vars={}):
@@ -17,11 +27,6 @@ def execute_command(cmd, shell=False, vars={}):
     """
     if isinstance(cmd, str):
         cmd = cmd.split()
-
-    if vars:
-        print(f"Executing command - {cmd} - {vars}")
-    else:
-        print(f"Executing command - {cmd}")
 
     env = os.environ.copy()
     for k, v in vars.items():
@@ -67,12 +72,7 @@ def get_mig_ids(device):
     return ids
 
 
-def make_mig_devices(df_workload, dev_table):
-
-    # Remove MPS
-    result = "".join(
-        execute_command(["echo quit | nvidia-cuda-mps-control"], shell=True)
-    ).lower()
+def make_mig_devices(gpu: str, profiles: list, verbose=False) -> tuple:
 
     # Remove old instances
     result = "".join(execute_command(f"sudo nvidia-smi mig -dci")).lower()
@@ -85,25 +85,21 @@ def make_mig_devices(df_workload, dev_table):
 
     time.sleep(1)
 
-    mig_table = dev_table.copy()
-    entity_table = dev_table.copy()
-
     devicetemp = []
 
     # Create new instances
-    for index, (device, profile) in df_workload[["Devices", "Collocation"]].iterrows():
+    for index, profile in enumerate(profiles):
         instance = profile.lower()
 
-        if profile == "mps":
-            # TODO: ACTIVATE MPS
-            pass
+        if instance in MIG_OPTIONS:
+            instance = MIG_OPTIONS[instance]
 
-        elif instance in MIG_OPTIONS:
-            other_mig_ids = get_mig_ids(device)
+        if instance in MIG_OPTIONS.values():
+            other_mig_ids = get_mig_ids(gpu)
 
             result = "".join(
                 execute_command(
-                    f"sudo nvidia-smi mig -i {int(device)} -cgi {profile} -C"
+                    f"sudo nvidia-smi mig -i {int(device)} -cgi {instance} -C"
                 )
             ).lower()
 
@@ -112,37 +108,54 @@ def make_mig_devices(df_workload, dev_table):
             if "failed" in result or "unable" in result:
                 raise ValueError(result)
 
-            mig_id = get_mig_ids(device) - other_mig_ids
+            mig_id = list(get_mig_ids(device) - other_mig_ids)[0]
 
-            devicetemp.append((index, mig_id, device, gpu_instance))
+            devicetemp.append((index, instance, mig_id, device, gpu_instance))
 
         time.sleep(
             2.0
         )  # Wait for the rather slow DCGMI discovery to yield a GPU entity id
 
-    for (index, mig_id, device, gpu_instance) in devicetemp:
+    results = []
+
+    for (index, device, instance, gpu_instance, mig_id) in devicetemp:
 
         while (entity_id := get_dcgmi_instance_id(device, gpu_instance)) is None:
             time.sleep(
                 0.5
             )  # Wait for the rather slow DCGMI discovery to yield a GPU entity id
 
-        mig_table[index] = frozenset(mig_id)
-        entity_table[index] = frozenset((entity_id,))
+        print(
+            f"Device {device}: Allocated {instance} ({gpu_instance}) with entity id ({entity_id}) and UUID ({mig_id})"
+        )
+        results.append((device, instance, gpu_instance, entity_id, mig_id))
 
-    return mig_table, entity_table
+    return results
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="MIG Editor")
-    parser.add_argument("-i", "--instance", metavar="GPU", help="gpu ID")
+def cli():
+    parser = argparse.ArgumentParser(
+        description="MIG Editor. CLI/importable module to automatically delete and create MIG gpu/cpu instances.",
+    )
+    parser.add_argument(
+        "-i",
+        "--instance",
+        metavar="GPU",
+        help="ID instance number of the GPU to manage MIG on.",
+    )
     parser.add_argument(
         "-p",
         "--profiles",
         metavar="PROFILES",
         nargs="+",
-        help="MiG profiles",
+        help="""Space seperated list of MIG profiles to use. Options: "1" or "1g.5gb", "2" or "2g.10gb", "3" or "3g.20gb", "4" or "4g.20gb", "7" or "7g.40gb".""",
         required=True,
     )
 
-    parser.parse_args()
+    args = parser.parse_args()
+
+    make_mig_devices(args.instance, args.profiles)
+
+
+if __name__ == "__main__":
+    cli()
