@@ -1,6 +1,6 @@
 """MIG Editor. CLI/importable module to automatically delete and create MIG gpu/cpu instances."""
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 import argparse
 import os
@@ -16,7 +16,12 @@ MIG_OPTIONS = {
     "4": "4g.20gb",
     "7": "7g.40gb",
 }
-SMIG_OPTIONS = ["1c.7g.40gb", "2c.7g.40gb", "3c.7g.40gb", "4c.7g.40gb", "7c.7g.40gb"]
+SMIG_OPTIONS = {
+    "s1": "1c.7g.40gb",
+    "s2": "2c.7g.40gb",
+    "s3": "3c.7g.40gb",
+    "s4": "4c.7g.40gb",
+}
 
 
 def execute_command(cmd, shell=False, vars={}):
@@ -91,65 +96,62 @@ def make_mig_devices(gpu: str, profiles: list, verbose=False) -> tuple:
     # TODO: remove this temp code
     shared_mig_gpui = {}
 
-    # Create new instances
+    # This supports Multi-MIG, which doesn't actually work right now
+    # Tested on PyTorch (and failed), perhaps works for different frameworks
     for index, profile in enumerate(profiles):
-        # This supports Multi-MIG, which doesn't actually work right now
-        # Tested on PyTorch (and failed), perhaps works for different frameworks
-        for profile in profiles.split("+"):
-            instance = profile.lower().strip()
+        instance = profile.lower().strip()
 
-            # Normal MIG
-            if instance in MIG_OPTIONS:
-                other_mig_ids = get_mig_ids(device)
+        if instance in MIG_OPTIONS:
+            instance = MIG_OPTIONS[instance]
+        elif instance in SMIG_OPTIONS:
+            instance = SMIG_OPTIONS[instance]
 
+        # Normal MIG
+        if instance in MIG_OPTIONS.values():
+            other_mig_ids = get_mig_ids(gpu)
+
+            result = "".join(
+                execute_command(f"sudo nvidia-smi mig -i {int(gpu)} -cgi {instance} -C")
+            ).lower()
+
+            gpu_instance = result.split("gpu instance id")[1].split("on gpu")[0].strip()
+
+            if "failed" in result or "unable" in result:
+                raise ValueError(result)
+
+            mig_id = get_mig_ids(gpu) - other_mig_ids
+
+            devicetemp.append((index, gpu, instance, gpu_instance, mig_id))
+
+        elif instance in SMIG_OPTIONS.values():
+            # Shared MIG, TODO: make more flexible
+            if gpu not in shared_mig_gpui:
                 result = "".join(
-                    execute_command(
-                        f"sudo nvidia-smi mig -i {int(device)} -cgi {profile} -C"
-                    )
+                    execute_command(f"sudo nvidia-smi mig -i {gpu} -cgi 7g.40gb")
                 ).lower()
+                instance_id = result.split("gpu instance id")[1].split("on")[0].strip()
+                shared_mig_gpui[gpu] = instance_id
 
-                gpu_instance = (
-                    result.split("gpu instance id")[1].split("on gpu")[0].strip()
+            other_mig_ids = get_mig_ids(gpu)
+
+            gpu_instance = shared_mig_gpui[gpu]
+
+            result = "".join(
+                execute_command(
+                    f"sudo nvidia-smi mig -gi {gpu_instance} -cci {list(SMIG_OPTIONS.values()).index(instance)}"
                 )
+            ).lower()
 
-                if "failed" in result or "unable" in result:
-                    raise ValueError(result)
+            if "failed" in result or "unable" in result:
+                raise ValueError(result)
 
-                mig_id = get_mig_ids(device) - other_mig_ids
+            mig_id = get_mig_ids(gpu) - other_mig_ids
 
-                devicetemp.append((index, mig_id, device, gpu_instance))
+            devicetemp.append((index, gpu, instance, gpu_instance, mig_id))
 
-            elif instance in SMIG_OPTIONS:
-                # Shared MIG, TODO: make more flexible
-                if device not in shared_mig_gpui:
-                    result = "".join(
-                        execute_command(f"sudo nvidia-smi mig -i {device} -cgi 7g.40gb")
-                    ).lower()
-                    instance_id = (
-                        result.split("gpu instance id")[1].split("on")[0].strip()
-                    )
-                    shared_mig_gpui[device] = instance_id
-
-                other_mig_ids = get_mig_ids(device)
-
-                gpu_instance = shared_mig_gpui[device]
-
-                result = "".join(
-                    execute_command(
-                        f"sudo nvidia-smi mig -gi {gpu_instance} -cci {SMIG_OPTIONS.index(instance)}"
-                    )
-                ).lower()
-
-                if "failed" in result or "unable" in result:
-                    raise ValueError(result)
-
-                mig_id = get_mig_ids(device) - other_mig_ids
-
-                devicetemp.append((index, mig_id, device, gpu_instance))
-
-            time.sleep(
-                2.0
-            )  # Wait for the rather slow DCGMI discovery to yield a GPU entity id
+        time.sleep(
+            2.0
+        )  # Wait for the rather slow DCGMI discovery to yield a GPU entity id
 
     results = []
 
