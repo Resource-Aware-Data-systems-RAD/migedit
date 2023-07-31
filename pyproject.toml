@@ -15,4 +15,4 @@ requires-python = ">=3.10.0"
 Home = "https://github.com/Sipondo/migedit"
 
 [project.scripts]
-migedit = "migedit:cli"
+migedit = "migedit:_cli"
