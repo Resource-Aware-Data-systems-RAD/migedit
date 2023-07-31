@@ -26,7 +26,8 @@ to get a list of all available MIG instance configurations.
 `migedit.make_mig_devices(0, ["1g.10gb"])`
 to remove old MIG instances and create new ones.
 
-# Changelog:
+# Changelog:'
+- 3.1: Added `remove_old` flag.
 - 3.0: Support for non-A100 devices (H100, A30, etc.) by dynamically grabbing available profiles.
 - 2.0: Support for Shared Memory Mig Mode (with 7g.40gb instances)
 - 1.1: Various bugfixes

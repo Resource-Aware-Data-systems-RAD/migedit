@@ -104,7 +104,11 @@ def _list_transpose(input_list: list) -> list:
 
 
 def make_mig_devices(
-    gpu: int, profiles: list, available_mig: list = [], available_smig: list = []
+    gpu: int,
+    profiles: list,
+    available_mig: list = [],
+    available_smig: list = [],
+    remove_old: bool = True,
 ) -> list:
     """Remove any old MIG instances and create MIG instances on gpu following profiles
 
@@ -113,6 +117,7 @@ def make_mig_devices(
         profiles (list): List of profiles to use
         available_mig (list, optional): Available MIG profiles. Automatically retrieves profiles if empty
         available_smig (list, optional): Available shared MIG profiles. Automatically retrieves profiles if empty
+        remove_old (bool, optional): Whether to remove old MIG instances. Defaults to True.
 
     Raises:
         ValueError: Command failed
@@ -132,15 +137,15 @@ def make_mig_devices(
             available_smig = options_smig
 
     # Remove old instances
-    result = "".join(_execute_command(f"sudo nvidia-smi mig -dci")).lower()
-    if "failed" in result or "unable" in result:
-        raise ValueError(result)
+    if remove_old:
+        result = "".join(_execute_command(f"sudo nvidia-smi mig -dci")).lower()
+        if "failed" in result or "unable" in result:
+            raise ValueError(result)
 
-    result = "".join(_execute_command(f"sudo nvidia-smi mig -dgi")).lower()
-    if "failed" in result or "unable" in result:
-        raise ValueError(result)
-
-    time.sleep(1)
+        result = "".join(_execute_command(f"sudo nvidia-smi mig -dgi")).lower()
+        if "failed" in result or "unable" in result:
+            raise ValueError(result)
+        time.sleep(1)
 
     devicetemp = []
 
