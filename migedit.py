@@ -1,6 +1,6 @@
 """MIG Editor. CLI/importable module to automatically delete and create MIG gpu/cpu instances."""
 
-__version__ = "0.3.0"
+__version__ = "0.3.2"
 
 import argparse
 import os
@@ -103,14 +103,31 @@ def _list_transpose(input_list: list) -> list:
     return [list(i) for i in zip(*input_list)]
 
 
+def remove_mig_devices():
+    """Remove all instances.
+
+    Raises:
+        ValueError: Remove instances failed.
+    """    
+    result = "".join(_execute_command(f"sudo nvidia-smi mig -dci")).lower()
+    if "failed" in result or "unable" in result:
+        raise ValueError(result)
+
+    result = "".join(_execute_command(f"sudo nvidia-smi mig -dgi")).lower()
+    if "failed" in result or "unable" in result:
+        raise ValueError(result)
+    time.sleep(1)
+
+
 def make_mig_devices(
     gpu: int,
     profiles: list,
     available_mig: list = [],
     available_smig: list = [],
     remove_old: bool = True,
+    verbose: bool = False,
 ) -> list:
-    """Remove any old MIG instances and create MIG instances on gpu following profiles
+    """Create MIG instances on gpu following profiles and (optionally) remove old instances.
 
     Args:
         gpu (int): GPU instance to create on
@@ -127,6 +144,9 @@ def make_mig_devices(
 
     """
 
+    # Split commas in profiles
+    profiles = [y for x in profiles for y in x.split(",")]
+
     # Retrieve missing profile availability data
     if (not available_mig) or (not available_smig):
         options_mig, options_smig = get_mig_profiles()
@@ -136,16 +156,8 @@ def make_mig_devices(
         if not available_smig:
             available_smig = options_smig
 
-    # Remove old instances
     if remove_old:
-        result = "".join(_execute_command(f"sudo nvidia-smi mig -dci")).lower()
-        if "failed" in result or "unable" in result:
-            raise ValueError(result)
-
-        result = "".join(_execute_command(f"sudo nvidia-smi mig -dgi")).lower()
-        if "failed" in result or "unable" in result:
-            raise ValueError(result)
-        time.sleep(1)
+        remove_mig_devices()
 
     devicetemp = []
 
@@ -221,9 +233,10 @@ def make_mig_devices(
                 0.5
             )  # Wait for the rather slow DCGMI discovery to yield a GPU entity id
 
-        print(
-            f"Device {device}: Allocated {instance} ({gpu_instance}) with entity id ({entity_id}) and UUID ({mig_id})"
-        )
+        if verbose:
+            print(
+                f"Device {device}: Allocated {instance} ({gpu_instance}) with entity id ({entity_id}) and UUID ({mig_id})"
+            )
         results.append((device, instance, gpu_instance, entity_id, mig_id))
 
     return results
@@ -295,13 +308,16 @@ def _cli():
         "--profiles",
         metavar="PROFILES",
         nargs="+",
-        help=f"""Space seperated list of MIG profiles to use.\nOptions:\n\t{f"{NEWTAB}".join([f'{k: <3} or {v}' for k,v in (available_mig | available_smig).items()])}""",
-        required=True,
+        help=f"""Space seperated list of MIG profiles to use. Will only remove instances if not specified.\nOptions:\n\t{f"{NEWTAB}".join([f'{k: <3} or {v}' for k,v in (available_mig | available_smig).items()])}""",
     )
 
     args = parser.parse_args()
 
-    make_mig_devices(args.instance, args.profiles, available_mig, available_smig)
+    if args.profiles is not None:
+        make_mig_devices(args.instance, args.profiles, available_mig=available_mig, available_smig=available_smig, verbose=True)
+    else:
+        remove_mig_devices()
+        print("Succesfully removed all MIG instances.")
 
 
 if __name__ == "__main__":

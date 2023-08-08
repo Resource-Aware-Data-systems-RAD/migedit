@@ -2,8 +2,8 @@
 MIG Editor python CLI tool and bindings for MIG device management.
 Supports all MIG devices and supports both 1:1 gpu instance compute instances setups and setups where compute instances share gpu instances.
 
-- [radT on Github](https://github.com/Resource-Aware-Data-Systems-RAD/migedit)
-- [radT on PyPI](https://pypi.org/project/migedit/)
+- [migedit on Github](https://github.com/Resource-Aware-Data-Systems-RAD/migedit)
+- [migedit on PyPI](https://pypi.org/project/migedit/)
 
 # Usage (CLI)
 
@@ -27,6 +27,7 @@ to get a list of all available MIG instance configurations.
 to remove old MIG instances and create new ones.
 
 # Changelog:'
+- 3.2: Added `remove_mig_devices()`. Empty command will now remove instances only. Added parsing of comma separated values.
 - 3.1: Added `remove_old` flag.
 - 3.0: Support for non-A100 devices (H100, A30, etc.) by dynamically grabbing available profiles.
 - 2.0: Support for Shared Memory Mig Mode (with 7g.40gb instances)
