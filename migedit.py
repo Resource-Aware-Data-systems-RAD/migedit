@@ -1,6 +1,6 @@
 """MIG Editor. CLI/importable module to automatically delete and create MIG gpu/cpu instances."""
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 import argparse
 import os
@@ -108,7 +108,13 @@ def remove_mig_devices():
 
     Raises:
         ValueError: Remove instances failed.
-    """    
+    """
+
+    # Check MIG devices available
+    result = "".join(_execute_command(f"nvidia-smi -L")).lower()
+    if "MIG" not in result:
+        return
+
     result = "".join(_execute_command(f"sudo nvidia-smi mig -dci")).lower()
     if "failed" in result or "unable" in result:
         raise ValueError(result)
@@ -314,7 +320,13 @@ def _cli():
     args = parser.parse_args()
 
     if args.profiles is not None:
-        make_mig_devices(args.instance, args.profiles, available_mig=available_mig, available_smig=available_smig, verbose=True)
+        make_mig_devices(
+            args.instance,
+            args.profiles,
+            available_mig=available_mig,
+            available_smig=available_smig,
+            verbose=True,
+        )
     else:
         remove_mig_devices()
         print("Succesfully removed all MIG instances.")

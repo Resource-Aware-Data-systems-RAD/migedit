@@ -27,6 +27,7 @@ to get a list of all available MIG instance configurations.
 to remove old MIG instances and create new ones.
 
 # Changelog:'
+- 3.3: Removed sudo dependency on nvidia-smi
 - 3.2: Added `remove_mig_devices()`. Empty command will now remove instances only. Added parsing of comma separated values.
 - 3.1: Added `remove_old` flag.
 - 3.0: Support for non-A100 devices (H100, A30, etc.) by dynamically grabbing available profiles.
