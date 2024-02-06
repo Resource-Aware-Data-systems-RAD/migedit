@@ -1,6 +1,6 @@
 """MIG Editor. CLI/importable module to automatically delete and create MIG gpu/cpu instances."""
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 
 import argparse
 import os
@@ -255,42 +255,46 @@ def get_mig_profiles() -> tuple[dict, dict]:
         tuple[dict, dict]: All available MIG and shared MIG profiles
     """
 
-    # Get profile lists
-    list_mig, scales = _list_transpose(
-        [
-            x[0]
-            for line in _execute_command("nvidia-smi mig -lgip")
-            if (x := RE_OPTIONS.findall(line))
-        ]
-    )
-    list_smig = [
-        f"{compute}c.{list_mig[-1]}" for compute in sorted(list(set(scales)))[:-1]
-    ]
-
-    # Convert to dicts
     available_mig, available_smig = {}, {}
-    for profile in list_mig:
-        original_prefix = profile.split("g")[0]
-        prefix = original_prefix
 
-        i = 0
-        while prefix in available_mig:
-            i += 1
-            prefix = f"{original_prefix}.{i}"
+    try:
+        # Get profile lists
+        list_mig, scales = _list_transpose(
+            [
+                x[0]
+                for line in _execute_command("nvidia-smi mig -lgip")
+                if (x := RE_OPTIONS.findall(line))
+            ]
+        )
+        list_smig = [
+            f"{compute}c.{list_mig[-1]}" for compute in sorted(list(set(scales)))[:-1]
+        ]
 
-        available_mig[prefix] = profile
+        # Convert to dicts
+        for profile in list_mig:
+            original_prefix = profile.split("g")[0]
+            prefix = original_prefix
 
-    for profile in list_smig:
-        original_prefix = "s" + profile.split("c")[0]
-        prefix = original_prefix
+            i = 0
+            while prefix in available_mig:
+                i += 1
+                prefix = f"{original_prefix}.{i}"
 
-        i = 0
-        while prefix in available_mig:
-            i += 1
-            prefix = f"{original_prefix}.{i}"
+            available_mig[prefix] = profile
 
-        available_smig[prefix] = profile
+        for profile in list_smig:
+            original_prefix = "s" + profile.split("c")[0]
+            prefix = original_prefix
 
+            i = 0
+            while prefix in available_mig:
+                i += 1
+                prefix = f"{original_prefix}.{i}"
+
+            available_smig[prefix] = profile
+    except ValueError as e: # no configs found
+        pass
+    
     return available_mig, available_smig
 
 
